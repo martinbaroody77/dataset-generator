@@ -24,12 +24,12 @@ generate_randoms <- function(columns, complexity) {
     type_vec[i] <- sample(1:3, 1)
   }
   
+  intercept <- sample(-500:500, 1)
   
-  
-  list(coefficient_vec, exponent_vec, type_vec)
+  list(coefficient_vec, exponent_vec, type_vec, intercept)
 }
 
-build_data_frame <- function(columns, rows, complexity, deviation, coefficient_vec, exponent_vec, type_vec) {
+build_data_frame <- function(columns, rows, complexity, deviation, coefficient_vec, exponent_vec, type_vec, intercept) {
   variable_values <- list()
   dependent_values <- vector(length = rows)
   
@@ -75,7 +75,7 @@ build_data_frame <- function(columns, rows, complexity, deviation, coefficient_v
     for (e in 1:columns) {
       row_vector[e] <- variable_values[[as.character(e)]][w]
     }
-    dependent_values[w] <- sum(coefficient_vec * (row_vector ^ exponent_vec))
+    dependent_values[w] <- sum(coefficient_vec * (row_vector ^ exponent_vec)) + intercept
   }
   
   if (deviation != "No deviation") {
@@ -111,11 +111,7 @@ build_data_frame <- function(columns, rows, complexity, deviation, coefficient_v
     names(data_to_add)[names(data_to_add) == "name"] <- paste("x", as.character(t), sep="")
     dataset <- cbind(dataset, data_to_add)
   }
-  
-  print(coefficient_vec)
-  print(exponent_vec)
-  print(mean(dependent_values))
-  
+
   dataset
   
 }
@@ -159,7 +155,7 @@ ui <- fluidPage(
 server <- function(input, output) {
   
   rv <- reactiveValues (coefficient_vec = NULL, exponent_vec = NULL, 
-                        type_vec = NULL)
+                        type_vec = NULL, intercept = NULL)
   
   observeEvent(input$generate, {
     random_list <- generate_randoms(columnsInput(), complexityInput())
@@ -167,6 +163,7 @@ server <- function(input, output) {
     rv$coefficient_vec <- random_list[[1]]
     rv$exponent_vec <- random_list[[2]]
     rv$type_vec <- random_list[[3]] 
+    rv$intercept <- random_list[[4]]
   })
   
   columnsInput <- reactive({
@@ -202,7 +199,7 @@ server <- function(input, output) {
         write.csv(build_data_frame(columnsInput(), rowsInput(),
                   complexityInput(), deviationInput(), 
                   rv$coefficient_vec, rv$exponent_vec, 
-                  rv$type_vec), file)
+                  rv$type_vec, rv$intercept), file)
       }
       else {
         write.csv(data.frame())
@@ -219,11 +216,11 @@ server <- function(input, output) {
     
     content = function(file) {
       if (!is.null(rv$coefficient_vec) & !is.null(rv$coefficient_vec) & 
-          !is.null(rv$coefficient_vec)) {
+          !is.null(rv$coefficient_vec) & !is.null(rv$intercept)) {
       write.csv(build_data_frame(columnsInput(), rowsTestInput(),
                                  complexityInput(), deviationInput(), 
                                  rv$coefficient_vec, rv$exponent_vec, 
-                                 rv$type_vec), file)
+                                 rv$type_vec, rv$intercept), file)
       }
       else {
         write.csv(data.frame())
