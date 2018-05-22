@@ -1,14 +1,10 @@
 library(shiny)
 
 
-generate_randoms <- function(columns, complexity) {
+generate_randoms <- function(columns, complexity, categoricals) {
   coefficient_vec <- vector(length=columns)
   exponent_vec <- vector(length=columns)
   type_vec <- vector(length=columns)
-  
-  
-
-  
   
   for (i in 1:columns) {
     coefficient_vec[i] <- sample(-50:50, 1)
@@ -16,20 +12,42 @@ generate_randoms <- function(columns, complexity) {
       exponent_vec[i] <- 1
     }
     else if (complexity == "Medium complexity") {
-      exponent_vec[i] <- sample(1:3, 1)
+      exponent_vec[i] <- sample(1:5, 1)
     }
     else if  (complexity == "High complexity") {
-      exponent_vec[i] <- sample(1:10, 1)
+      exponent_vec[i] <- sample(1:6, 1)
     }
     type_vec[i] <- sample(1:3, 1)
   }
   
+  if (complexity == "High complexity") {
+    zero_coefficients <- sample(1:columns, ceiling(columns/20))
+    for (index in zero_coefficients) {
+      coefficient_vec[index] <- 0
+    }
+  }
+  
   intercept <- sample(-500:500, 1)
+  
+  if (categoricals == "Yes") {
+    categs <- sample(1:columns, ceiling(columns/10))
+    for (index in categs) {
+      type_vec[index] <- 2
+    }
+  }
+  else if (categoricals == "No") {
+    for (m in 1:columns) {
+      if (type_vec[m] == 2) {
+        type_vec[m] <- 1
+      }
+    }
+  }
   
   list(coefficient_vec, exponent_vec, type_vec, intercept)
 }
 
-build_data_frame <- function(columns, rows, complexity, deviation, coefficient_vec, exponent_vec, type_vec, intercept) {
+build_data_frame <- function(columns, rows, complexity, deviation, coefficient_vec, exponent_vec, type_vec, intercept,
+                             na_values) {
   variable_values <- list()
   dependent_values <- vector(length = rows)
   
@@ -70,12 +88,41 @@ build_data_frame <- function(columns, rows, complexity, deviation, coefficient_v
     variable_values[[as.character(k)]] <- column_values
   }
   
+  
+  
   for (w in 1:rows) {
     row_vector <- vector(length = columns) 
     for (e in 1:columns) {
       row_vector[e] <- variable_values[[as.character(e)]][w]
     }
     dependent_values[w] <- sum(coefficient_vec * (row_vector ^ exponent_vec)) + intercept
+  }
+  
+  
+  type2_map <- c('1'='category_a', '2'='category_b', '3'='category_c', '4' ='category_d', '5'='category_e',
+                 '6'='category_f', '7'='category_g', '8'='category_h', '9'='category_i', '10'='category_j')
+  for (ind in 1:length(type_vec)) {
+    if (type_vec[ind] == 2) {
+      variable_values[[as.character(ind)]] <- type2_map[as.factor(variable_values[[as.character(ind)]])] 
+    }
+  }
+  
+  
+  if (na_values != "None") {
+    na_rows <- vector(length = rows)
+    na_columns <- vector(length = columns)
+    na_amount <- 0
+    if (na_values == "Some") {
+      na_amount <- 0.05
+    }
+    else if (na_values == "Lots") {
+      na_amount <- 0.13
+    }
+    na_rows <- sample(1:rows, ceiling(na_amount*rows))
+    na_columns <- sample(1:columns, ceiling(na_amount * rows), replace=TRUE)
+    for (item in 1:ceiling(na_amount * rows)) {
+      variable_values[[as.character(na_columns[item])]][na_rows[item]] <- NA
+    }
   }
   
   if (deviation != "No deviation") {
@@ -111,7 +158,7 @@ build_data_frame <- function(columns, rows, complexity, deviation, coefficient_v
     names(data_to_add)[names(data_to_add) == "name"] <- paste("x", as.character(t), sep="")
     dataset <- cbind(dataset, data_to_add)
   }
-
+  
   dataset
   
 }
@@ -138,6 +185,8 @@ ui <- fluidPage(
       numericInput("columns", label="Enter the number of attributes you would like y to depend on.", value=5, min=1),
       numericInput("rows", label="Enter the number of data instances you would like for the training data.", value=5, min=1),
       numericInput("rowsTest", label="Enter the number of data instances you would like for the test data.", value=5, min=1),
+      selectInput("categoricals", label="Enter whether you would like categorical values in the dataset or not.", choices=list("No", "Yes"), selected="No"),
+      selectInput("nas", label="Enter the proportion of missing values in the data.", choices=list("None", "Some", "Lots"), selected="None"),
       selectInput("complexity", label="Enter the level of complexity you would like for the pattern in the data.", choices=list("Low complexity", "Medium complexity", "High complexity"), selected="Low complexity"),
       selectInput("deviation", label="Enter the amount of deviation allowed from the general pattern.", choices=list("No deviation", "Low deviation", "Medium deviation", "High deviation"), selected="No deviation"),
       actionButton("generate", label="Generate datasets"),
@@ -158,7 +207,7 @@ server <- function(input, output) {
                         type_vec = NULL, intercept = NULL)
   
   observeEvent(input$generate, {
-    random_list <- generate_randoms(columnsInput(), complexityInput())
+    random_list <- generate_randoms(columnsInput(), complexityInput(), categoricalsInput())
     
     rv$coefficient_vec <- random_list[[1]]
     rv$exponent_vec <- random_list[[2]]
@@ -186,6 +235,14 @@ server <- function(input, output) {
     input$rowsTest
   })
   
+  categoricalsInput <- reactive({
+    input$categoricals
+  })
+  
+  nasInput <- reactive({
+    input$nas
+  })
+  
   output$download <- downloadHandler(
     
     filename = function() {
@@ -197,9 +254,9 @@ server <- function(input, output) {
       if (!is.null(rv$coefficient_vec) & !is.null(rv$coefficient_vec) & 
           !is.null(rv$coefficient_vec)) {
         write.csv(build_data_frame(columnsInput(), rowsInput(),
-                  complexityInput(), deviationInput(), 
-                  rv$coefficient_vec, rv$exponent_vec, 
-                  rv$type_vec, rv$intercept), file)
+                                   complexityInput(), deviationInput(), 
+                                   rv$coefficient_vec, rv$exponent_vec, 
+                                   rv$type_vec, rv$intercept, nasInput()), file)
       }
       else {
         write.csv(data.frame())
@@ -217,10 +274,10 @@ server <- function(input, output) {
     content = function(file) {
       if (!is.null(rv$coefficient_vec) & !is.null(rv$coefficient_vec) & 
           !is.null(rv$coefficient_vec) & !is.null(rv$intercept)) {
-      write.csv(build_data_frame(columnsInput(), rowsTestInput(),
-                                 complexityInput(), deviationInput(), 
-                                 rv$coefficient_vec, rv$exponent_vec, 
-                                 rv$type_vec, rv$intercept), file)
+        write.csv(build_data_frame(columnsInput(), rowsTestInput(),
+                                   complexityInput(), deviationInput(), 
+                                   rv$coefficient_vec, rv$exponent_vec, 
+                                   rv$type_vec, rv$intercept, nasInput()), file)
       }
       else {
         write.csv(data.frame())
