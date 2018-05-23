@@ -43,11 +43,18 @@ generate_randoms <- function(columns, complexity, categoricals) {
     }
   }
   
-  list(coefficient_vec, exponent_vec, type_vec, intercept)
+  dep_coeffs <- vector(length = ceiling((columns - 1) / 10))
+  for (j in 1:length(dep_coeffs)) {
+    dep_coeffs[j] <- sample(-20:20, 1)
+  }
+  
+  synergies <- sample(1:columns, ceiling((columns - 1) / 10) * 2) 
+  
+  list(coefficient_vec, exponent_vec, type_vec, intercept, dep_coeffs, synergies)
 }
 
 build_data_frame <- function(columns, rows, complexity, deviation, coefficient_vec, exponent_vec, type_vec, intercept,
-                             na_values) {
+                             na_values, dep_coeffs, synergies) {
   variable_values <- list()
   dependent_values <- vector(length = rows)
   
@@ -96,6 +103,15 @@ build_data_frame <- function(columns, rows, complexity, deviation, coefficient_v
       row_vector[e] <- variable_values[[as.character(e)]][w]
     }
     dependent_values[w] <- sum(coefficient_vec * (row_vector ^ exponent_vec)) + intercept
+    if (complexity == "High complexity") {
+      synergy_pointer <- 1
+      for (coeff in length(dep_coeffs)) {
+        value <- (coeff * variable_values[[as.character(synergies[synergy_pointer])]][w] * 
+                    variable_values[[as.character(synergies[synergy_pointer + 1])]][w])
+        dependent_values[w] <- dependent_values[w] + value
+        synergy_pointer = synergy_pointer + 2
+      }
+    }
   }
   
   
@@ -204,7 +220,7 @@ ui <- fluidPage(
 server <- function(input, output) {
   
   rv <- reactiveValues (coefficient_vec = NULL, exponent_vec = NULL, 
-                        type_vec = NULL, intercept = NULL)
+                        type_vec = NULL, intercept = NULL, dep_coeffs=NULL, synergies=NULL)
   
   observeEvent(input$generate, {
     random_list <- generate_randoms(columnsInput(), complexityInput(), categoricalsInput())
@@ -213,6 +229,8 @@ server <- function(input, output) {
     rv$exponent_vec <- random_list[[2]]
     rv$type_vec <- random_list[[3]] 
     rv$intercept <- random_list[[4]]
+    rv$dep_coeffs <- random_list[[5]]
+    rv$synergies <- random_list[[6]]
   })
   
   columnsInput <- reactive({
@@ -256,7 +274,8 @@ server <- function(input, output) {
         write.csv(build_data_frame(columnsInput(), rowsInput(),
                                    complexityInput(), deviationInput(), 
                                    rv$coefficient_vec, rv$exponent_vec, 
-                                   rv$type_vec, rv$intercept, nasInput()), file)
+                                   rv$type_vec, rv$intercept, nasInput(),
+                                   rv$dep_coeffs, rv$synergies), file)
       }
       else {
         write.csv(data.frame())
@@ -277,7 +296,8 @@ server <- function(input, output) {
         write.csv(build_data_frame(columnsInput(), rowsTestInput(),
                                    complexityInput(), deviationInput(), 
                                    rv$coefficient_vec, rv$exponent_vec, 
-                                   rv$type_vec, rv$intercept, nasInput()), file)
+                                   rv$type_vec, rv$intercept, nasInput(),
+                                   rv$dep_coeffs, rv$synergies), file)
       }
       else {
         write.csv(data.frame())
